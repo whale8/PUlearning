@@ -3,12 +3,9 @@ import matplotlib.pyplot as plt
 from numpy import random
 import seaborn as sns
 from sklearn import metrics
-from sklearn.linear_model import LogisticRegression,LogisticRegressionCV
-from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import LogisticRegression
 sns.set_style("white")
 random.seed(0)
-
-from sklearn import base
 
 
 class PUWrapper(object):
@@ -17,27 +14,30 @@ class PUWrapper(object):
 		self.n_fold = n_fold
 
 	def fit(self,X,s):
-		self.clf.fit(X,s)
+		# estimate p(s=1|x) to estimate p(s=1|y=1)
+		self.clf.fit(X,s) # claasify labeled or not
 
-		Xp=X[s==1]
-		n=len(Xp)
+		Xp = X[s==1] # labeled
+		n = len(Xp) # number of labeled
 		
-		cv_split=np.arange(n) * self.n_fold/n
-		cv_index=cv_split[random.permutation(n)]
-		cs=np.zeros(self.n_fold)
+		cv_split = np.arange(n) * self.n_fold/n
+		cv_index = cv_split[random.permutation(n)] # shuffle
+		cs = np.zeros(self.n_fold)
 		for k in range(self.n_fold):
-			Xptr=Xp[cv_index==k]
-			cs[k]=np.mean(self.clf.predict_proba(Xptr)[:,1])
-		self.c_=cs.mean()
+			Xptr = Xp[cv_index==k]
+			cs[k] = np.mean(self.clf.predict_proba(Xptr)[:,1])
+		self.c_ = cs.mean()
 		return self
 
 	def predict_proba(self,X):
-		proba=self.clf.predict_proba(X)
+		proba=self.clf.predict_proba(X) / self.c_
+		# p(y=1|x) = p(s=1|x)/c
+		# where c = p(s=1|y=1) = mean(p(s=1|x))
 		return proba
 
 	def predict(self,X):
 		proba=self.predict_proba(X)[:,1]
-		return proba>=(0.5*self.c_)
+		return proba >= 0.5 #proba>=(0.5*self.c_)
 
 
 if __name__ == "__main__":
@@ -65,7 +65,9 @@ if __name__ == "__main__":
 	print("accuracy (PU):"\
 		  ,metrics.accuracy_score(y[s==0],clf.predict(X[s==0])))
 	print("pos's F1 (PU):",score(y[s==0],clf.predict(X[s==0])))
+	print("p(s=1|y=1): ", clf.c_)
 
+	
 	offset=.5
 	xx,yy=np.meshgrid(np.linspace(X[:,0].min()-offset,X[:,0].max()+offset,100),
 					  np.linspace(X[:,1].min()-offset,X[:,1].max()+offset,100))
@@ -74,7 +76,7 @@ if __name__ == "__main__":
 	Z2=proba[:,1]
 	Z2=Z2.reshape(xx.shape)
 
-	a1=plt.contour(xx, yy, Z2, levels=[0.5*clf.c_], linewidths=2, colors='green')
+	a1=plt.contour(xx, yy, Z2, levels=[0.5], linewidths=2, colors='green')
 	b1=plt.scatter(X[label2==1][:,0],X[label2==1][:,1],c="blue",s=50)
 	b2=plt.scatter(X[label2==0][:,0],X[label2==0][:,1],c="red",s=50)
 	plt.axis("tight")
